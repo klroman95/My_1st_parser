@@ -1,0 +1,237 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Nov  9 19:13:20 2016
+
+@author: Roman
+"""
+#подключаю необходимые библиотеки
+import requests
+import re
+from bs4 import BeautifulSoup
+import pandas as pd
+import time
+
+#ниже отпределяю функции, выкачивающие необходимую инфу со страницы
+def html_stripper(text):
+    return re.sub('<[^<]+?>', '', str(text))
+    
+def getPrice(flat_page):
+    price = flat_page.find('div', attrs={'class':'object_descr_price'})
+    price = re.split('<div>|руб|\W', str(price))
+    price = "".join([i for i in price if i.isdigit()][-3:])
+    return int(price)
+    
+def getCoords(flat_page):
+    coords = flat_page.find('div', attrs={'class':'map_info_button_extend'}).contents[1]
+    coords = re.split('&amp|center=|%2C', str(coords))
+    coords_list = []
+    for item in coords:
+        if item[0].isdigit():
+            coords_list.append(item)
+    lat = float(coords_list[0])
+    lon = float(coords_list[1])
+    return lat, lon
+    
+def getRoom(flat_page):
+    rooms = flat_page.find('div', attrs={'class':'object_descr_title'})
+    rooms = html_stripper(rooms)
+    room_number = ''
+    for i in re.split('-|\n', rooms):
+        if 'комн' in i:
+            break
+        else:
+            room_number += i
+    room_number = "".join(room_number.split())
+    return room_number
+    
+def getTotsp(flat_page):
+     area=flat_page.find('div', attrs={'class': 'clearfix'})
+     area=str(area)
+     line1='Общая площадь:</th>\n<td>\n<i class="object_descr_details_color"></i>'
+     n1=int(area.find(line1))
+     area=area[(n1+len(line1)):(n1+len(line1)+10)]
+     line2='\xa0'
+     n2=int(area.find(line2))    
+     area=area[0:n2].replace(',','.')
+     if area.find('–')!=-1 : return 'Nan'
+     area=float(area)
+     return area
+ 
+def getLivesp(flat_page):
+     area=flat_page.find('div', attrs={'class': 'clearfix'})
+     area=str(area)
+     line1='Жилая площадь:</th>\n<td>\n<i class="object_descr_details_color" style="background-color:#90C090"></i>'
+     n1=int(area.find(line1))
+     area=area[(n1+len(line1)):(n1+len(line1)+10)]
+     line2='\xa0'
+     n2=int(area.find(line2))    
+     area=area[0:n2].replace(',','.')
+     if area.find('–')!=-1 : return 'NaN'
+     area=float(area)
+     return area
+     
+def getKitsp(flat_page):
+     area=flat_page.find('div', attrs={'class': 'clearfix'})
+     area=str(area)
+     line1='Площадь кухни:</th>\n<td>\n<i class="object_descr_details_color" style="background-color:#C09090"></i>'
+     n1=int(area.find(line1))
+     area=area[(n1+len(line1)):(n1+len(line1)+10)]
+     line2='\xa0'
+     n2=int(area.find(line2))    
+     area=area[0:n2].replace(',','.')
+     if area.find('–')!=-1 : return 'NaN'
+     area=float(area)
+     return area
+     
+def getFloor(flat_page):
+     area=flat_page.find('div', attrs={'class': 'clearfix'})
+     area=str(area)
+     line1='Этаж:</th>\n<td>\n'
+     line2='</td>\n</tr>\n<tr>\n<th>'
+     line3='\xa0'
+     n1=int(area.find(line1))
+     n2=int(area.find(line2,n1))
+     area=area[(n1+len(line1)):n2]
+     n3=area.find(line3)
+     Floor= float(area[0:n3])
+     return Floor
+     
+     
+def getNfloors(flat_page):
+     area=flat_page.find('div', attrs={'class': 'clearfix'})
+     area=str(area)
+     line1='Этаж:</th>\n<td>\n'
+     line2='</td>\n</tr>\n<tr>\n<th>'
+     line3='/\xa0'
+     n1=int(area.find(line1))
+     n2=int(area.find(line2,n1))
+     area=area[(n1+len(line1)):n2]
+     n3=area.find(line3)
+     if n3==-1 : return 'NaN'
+     NFloors=float(area[n3+2:])
+     return NFloors
+
+def getBalcony(flat_page):
+    area=flat_page.find('div', attrs={'class': 'clearfix'})
+    area=str(area)
+    line1='Балкон:</th>\n<td><i class="object_descr_details_color" style="background-color:#C0C0C0"></i>'
+    line2='</td>'
+    n1=int(area.find(line1))
+    if n1==-1 : return 'NaN'
+    n2=int(area.find(line2,n1))
+    area=area[n1+len(line1):n2]
+    if area.find('нет')!=-1 or area.find('–')!=-1 :  
+        return 0
+    else:
+        return 1
+        
+def getTel(flat_page):
+    area=flat_page.find('div', attrs={'class': 'clearfix'})
+    area=str(area)  
+    line1='Телефон:</th>\n<td>'
+    line2='</td>'
+    n1=int(area.find(line1))
+    if n1==-1 : return 'NaN'
+    n2=int(area.find(line2,n1))
+    area=area[n1+len(line1):n2]
+    if area.find('нет')==-1 or area.find('–')==-1 :  
+        return 1
+    else:
+        return 0
+        
+def getNew(flat_page):
+    area=flat_page.find('div', attrs={'class': 'clearfix'})
+    area=str(area)
+    line1='новостройка'
+    line2='первичный рынок' 
+    line3='вторичка'
+    if area.find(line1)!=-1 or area.find(line2)!=-1 : return 1   
+    if area.find(line3)!= -1 : return 0
+    return 'NaN' 
+    
+    
+def getBrick(flat_page):
+    area=flat_page.find('div', attrs={'class': 'clearfix'})
+    area=str(area)
+    line1='кирпичный'
+    line2='монолитный' 
+    line3='панельный'
+    if area.find(line1)!=-1 or area.find(line2)!=-1 or area.find(line3)!=-1: return 1   
+    return 0      
+    
+def getMetrdist(flat_page):
+    area=flat_page.find('span', attrs={'class': 'object_item_metro_comment'})
+    area=html_stripper(area)
+    area=str(area)
+    area=area[1:]
+    n1=area.find('\n')
+    if n1==-1 : return 'NaN'
+    area=area[:n1]
+    Min=float(area)
+    return Min
+    
+def getWalk(flat_page):
+    area=flat_page.find('span', attrs={'class': 'object_item_metro_comment'})
+    area=html_stripper(area)
+    area=str(area)
+    n1=area.find('пешком')
+    if n1!=-1 : return 1
+    return 0
+
+#выкачиваю ссылки на квартиры в вектор links        
+page = 1
+district = 'http://www.cian.ru/cat.php?deal_type=sale&district%5B0%5D=13&district%5B1%5D=14&district%5B2%5D=15&district%5B3%5D=16&district%5B4%5D=17&district%5B5%5D=18&district%5B6%5D=19&district%5B7%5D=20&district%5B8%5D=21&district%5B9%5D=22&engine_version=2&offer_type=flat&p=%7B%7D&room1=1&room2=1&room3=1&room4=1&room5=1&room6=1'
+links = []
+for page in range(1, 30):
+    page_url = district.format(page)
+    
+    search= requests.get(page_url)
+    search = search.content
+    search = BeautifulSoup(search, 'lxml')
+    flat_urls = search.findAll('div', attrs = {'ng-class':"{'serp-item_removed': offer.remove.state, 'serp-item_popup-opened': isPopupOpen}"})
+    flat_urls = re.split('http://www.cian.ru/sale/flat/|/" ng-class="', str(flat_urls))
+    for link in flat_urls:
+        if link.isdigit():
+            links.append(link)
+            
+#координаты центра Москвы           
+Cen=(55.751458, 37.618702)
+ 
+
+
+
+
+
+
+#создаю массив flatStat со всей нужной инфой (не выкачал номера квартир, будут попозже(наверное) )
+flatStats=pd.DataFrame()
+
+
+for i in range(0,len(links)):
+    flat_url = 'http://www.cian.ru/sale/flat/' + str(links[i]) + '/'
+    flat_page = requests.get(flat_url)
+    flat_page = flat_page.content
+    flat_page = BeautifulSoup(flat_page, 'lxml')
+    flatStats=flatStats.append({'Price':getPrice(flat_page),'Dist':(getCoords(flat_page)[0]-Cen[0])*(getCoords(flat_page)[0]-Cen[0])+(getCoords(flat_page)[1]-Cen[1])*(getCoords(flat_page)[1]-Cen[1]),'Rooms':getRoom(flat_page),'Total_Area':getTotsp(flat_page),'Living_Area':getLivesp(flat_page),'Kitchen_Area':getKitsp(flat_page),'Floor':getFloor(flat_page),'NFloors':getNfloors(flat_page)
+    ,'Balcony':getBalcony(flat_page),'Tel':getTel(flat_page),'New':getNew(flat_page),'Brick':getBrick(flat_page),'Metro_Dist':getMetrdist(flat_page),'Walk':getWalk(flat_page)},ignore_index=True)
+    print(i)
+    
+#сохраняю в .csv   
+flatStats.to_csv('out.csv', sep=',', header=1   )    
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+
+    
+    
+    
+    
