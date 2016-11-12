@@ -1,9 +1,4 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Nov  9 19:13:20 2016
 
-@author: Roman
-"""
 #подключаю необходимые библиотеки
 import requests
 import re
@@ -197,11 +192,6 @@ for page in range(1, 30):
 #координаты центра Москвы           
 Cen=(55.751458, 37.618702)
  
-
-
-
-
-
 
 #создаю массив flatStat со всей нужной инфой (не выкачал номера квартир, будут попозже(наверное) )
 flatStats=pd.DataFrame()
